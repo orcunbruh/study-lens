@@ -1,0 +1,9 @@
+# Geçici çalışma dosyaları
+runtime/snips/*
+runtime/pins/*
+runtime/pdfs/*
+runtime/*.json
+*.pyc
+__pycache__/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudyLens — Ders & Not Çalışma Merkezi</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- KaTeX Matematik Motoru -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+  <!-- Markdown & PDF Motorları -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="theme-light flex flex-col h-screen select-text">
+
+  <!-- ÜST OKUMA İLERLEME ÇUBUĞU (GPU scaleX) -->
+  <div id="readingProgressBar" class="fixed top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-600 via-sky-500 to-emerald-500 z-[95]"></div>
+
+  <!-- SHIFT KIRPMA MODU HUD GÖSTERGESİ -->
+  <div id="snipHudBanner" class="px-5 py-2 rounded-full bg-slate-900 text-white border border-sky-400/50 shadow-xl flex items-center space-x-3">
+    <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+    <span class="text-xs font-bold tracking-wide text-sky-300">✂️ KIRPMA MODU AKTİF</span>
+    <span class="text-xs text-slate-200">Anlamadığın kısmı (ör. <code class="text-amber-300 font-mono">=</code> sonrası adımı, formülü veya grafiği) fareyle kutu içine al</span>
+    <span class="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">ESC: İptal</span>
+  </div>
+
+  <!-- ÜST BAR (HEADER) -->
+  <header class="h-14 shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-header)] px-3 lg:px-5 flex items-center justify-between z-40">
+    <!-- Sol: Logo & Aktif Ders Başlığı -->
+    <div class="flex items-center space-x-3 min-w-0">
+      <button id="toggleSidebarBtn" onclick="toggleSidebar()" class="p-2 rounded-xl hover:bg-slate-500/10 text-[var(--text-secondary)] transition" title="Ders Kütüphanesi & Bölümleri Aç/Kapat">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h10"></path>
+        </svg>
+      </button>
+
+      <div class="flex items-center space-x-2.5 min-w-0">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 via-sky-500 to-emerald-500 flex items-center justify-center text-white font-black text-xs shadow-sm shrink-0">
+          ∑✂️
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center space-x-2">
+            <h1 id="activeNoteHeaderTitle" class="text-sm font-extrabold truncate text-[var(--text-main)]">StudyLens Ders Merkezi</h1>
+            <span id="flashStatusBadge" class="hidden md:inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+              AI Hazır
+            </span>
+            <span id="fpsCounterBadge" class="hidden sm:inline-flex items-center px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/25" title="Gerçek Zamanlı Yenileme Hızı">
+              144 FPS
+            </span>
+          </div>
+          <p id="activeNoteHeaderSub" class="text-[11px] text-[var(--text-muted)] truncate hidden xl:block">
+            <kbd class="px-1 py-0.2 text-[10px] font-bold bg-slate-500/15 rounded">Shift + Sürükle</kbd> Kırp & Sor • <kbd class="px-1 py-0.2 text-[10px] font-bold bg-slate-500/15 rounded">Ctrl + Tekerlek</kbd> Sayfayı Küçült/Büyüt
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sağ: Zoom & Geniş Sayfa + Kırpma + Araçlar -->
+    <div class="flex items-center space-x-1.5 shrink-0">
+      <!-- SAYFA ÖLÇEKLEME (ZOOM) VE GENİŞ BAKIŞ KONTROLLERİ -->
+      <div class="flex items-center bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-0.5 space-x-0.5">
+        <button onclick="changeZoom(-0.10)" class="w-7 h-7 rounded-lg hover:bg-slate-500/15 text-[var(--text-secondary)] font-extrabold text-sm flex items-center justify-center transition" title="Notu Küçült / Daha Geniş Bak (Ctrl + Tekerlek Aşağı)">
+          −
+        </button>
+        <button id="zoomPercentBtn" onclick="resetZoom()" class="px-2 h-7 rounded-lg hover:bg-slate-500/15 text-[11px] font-mono font-extrabold text-[var(--text-main)] transition" title="Ölçeği %100'e Sıfırla">
+          100%
+        </button>
+        <button onclick="changeZoom(0.10)" class="w-7 h-7 rounded-lg hover:bg-slate-500/15 text-[var(--text-secondary)] font-extrabold text-sm flex items-center justify-center transition" title="Notu Büyüt (Ctrl + Tekerlek Yukarı)">
+          +
+        </button>
+        <div class="w-[1px] h-4 bg-[var(--border-color)] mx-0.5"></div>
+        <button id="wideModeBtn" onclick="toggleWideMode()" class="px-2.5 h-7 rounded-lg hover:bg-blue-500/15 text-[11px] font-bold text-[var(--text-secondary)] transition flex items-center space-x-1" title="Sayfayı Tam Ekran Genişliğine Yay (Geniş Bakış)">
+          <span>↔</span>
+          <span class="hidden md:inline">Geniş Bakış</span>
+        </button>
+      </div>
+
+      <!-- Çözümleri Gizle / Bulanıklaştır (Active Recall) Modu -->
+      <button id="blurSolutionsToggleBtn" onclick="toggleBlurSolutionsMode()" class="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-purple-500/40 bg-purple-500/10 text-purple-600 dark:text-purple-300 hover:bg-purple-500/20 transition flex items-center space-x-1.5" title="Çözüm adımlarını ve sonuçları bulanıklaştır (Kısayol: B). Tıkladığın adım tek tek açılır!">
+        <span id="blurSolutionsIcon">🙈</span>
+        <span id="blurSolutionsLabel" class="hidden sm:inline">Çözümleri Gizle</span>
+        <span id="blurSolutionsCountBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] bg-purple-600 text-white font-mono">0</span>
+      </button>
+
+      <!-- Kırpma Modu Tetikleyici Buton -->
+      <button id="manualSnipToggleBtn" onclick="toggleManualSnipMode()" class="px-3 py-1.5 rounded-xl text-xs font-bold border border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-300 hover:bg-sky-500/20 transition flex items-center space-x-1.5" title="Shift tuşuna basılı tutarak veya bu butona basarak kırpma modunu açabilirsin">
+        <span>✂️</span>
+        <span>Kırp & Sor</span>
+      </button>
+
+      <!-- MAT3327 İnteraktif Laboratuvar Geçiş Butonu -->
+      <button id="interactiveLabBtn" onclick="toggleInteractiveLabModal()" class="hidden px-2.5 py-1.5 rounded-xl text-xs font-bold border border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-500/20 transition items-center space-x-1">
+        <span>⚡</span>
+        <span class="hidden md:inline">Simülatör</span>
+      </button>
+
+      <!-- Not İçi Arama -->
+      <div class="relative hidden 2xl:block w-44">
+        <input id="inNoteSearchInput" type="text" oninput="filterInNote(this.value)" placeholder="Formül/konu ara..." class="w-full rounded-xl pl-7 pr-2.5 py-1.5 text-xs bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 transition">
+        <svg class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+      </div>
+
+      <!-- Not / PDF Yükle -->
+      <label class="cursor-pointer px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-[var(--border-color)] bg-[var(--bg-card)] hover:border-blue-500 text-[var(--text-secondary)] transition flex items-center space-x-1" title="Yeni Markdown (.md) veya PDF (.pdf) ders materyali ekle">
+        <span>➕</span>
+        <span class="hidden xl:inline">Ekle</span>
+        <input type="file" id="fileUploadInput" accept=".md,.markdown,.pdf" class="hidden" onchange="handleFileUpload(event)">
+      </label>
+
+      <!-- Tema Değiştirici -->
+      <button id="themeToggleBtn" onclick="toggleTheme()" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-[var(--border-color)] bg-[var(--bg-card)] hover:border-blue-500 text-[var(--text-secondary)] transition flex items-center space-x-1" title="Ferah Ders Kitabı (Açık) / Gece Modu (Koyu) Geçişi">
+        <span id="themeIcon">🌙</span>
+      </button>
+
+      <!-- Rehber (? Butonu) -->
+      <button onclick="openHelpModal()" class="w-8 h-8 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] hover:border-blue-500 text-[var(--text-secondary)] font-extrabold text-xs flex items-center justify-center transition" title="Nasıl Kullanılır?">
+        ?
+      </button>
+    </div>
+  </header>
+
+  <!-- ANA GÖVDE -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- SOL KENAR ÇUBUĞU -->
+    <aside id="leftSidebar" class="w-72 shrink-0 border-r border-[var(--border-color)] bg-[var(--bg-sidebar)] flex flex-col overflow-hidden">
+      <div class="p-2 border-b border-[var(--border-color)] grid grid-cols-3 gap-1 bg-[var(--bg-card)]">
+        <button id="sideTabBtn-library" onclick="switchSidebarTab('library')" class="py-1.5 px-2 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-sm transition">
+          📚 Dersler
+        </button>
+        <button id="sideTabBtn-chapters" onclick="switchSidebarTab('chapters')" class="py-1.5 px-2 rounded-lg text-xs font-semibold text-[var(--text-secondary)] hover:bg-slate-500/10 transition">
+          📑 Bölümler
+        </button>
+        <button id="sideTabBtn-pins" onclick="switchSidebarTab('pins')" class="py-1.5 px-2 rounded-lg text-xs font-semibold text-[var(--text-secondary)] hover:bg-slate-500/10 transition flex items-center justify-center space-x-1">
+          <span>📌 İğneler</span>
+          <span id="sidebarPinCountBadge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-500/20 text-emerald-600 font-bold">0</span>
+        </button>
+      </div>
+
+      <!-- 1. Ders Kütüphanesi Listesi -->
+      <div id="sidePanel-library" class="flex-1 overflow-y-auto p-2.5 space-y-2">
+        <div class="px-1 flex items-center justify-between">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">OrcunOS Kütüphanesi</span>
+          <button onclick="loadLibrary()" class="text-[11px] text-blue-500 hover:underline font-semibold">Yenile</button>
+        </div>
+        <div id="libraryListContainer" class="space-y-2"></div>
+      </div>
+
+      <!-- 2. Aktif Notun Bölümleri -->
+      <div id="sidePanel-chapters" class="hidden flex-1 overflow-y-auto p-2.5 space-y-1">
+        <div class="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+          Bölüm Haritası
+        </div>
+        <div id="chaptersListContainer" class="space-y-1"></div>
+      </div>
+
+      <!-- 3. Nota İğnelenen Açıklamalar -->
+      <div id="sidePanel-pins" class="hidden flex-1 overflow-y-auto p-2.5 space-y-2">
+        <div class="px-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+          Kaydedilen Açıklama Baloncukları
+        </div>
+        <div id="pinsListContainer" class="space-y-2"></div>
+      </div>
+
+      <div class="p-2.5 border-t border-[var(--border-color)] bg-[var(--bg-card)] text-[11px] text-[var(--text-muted)] space-y-1">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-[var(--text-secondary)]">Kırp & Sor:</span>
+          <kbd class="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-sky-400 font-bold">Shift + Sürükle</kbd>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-[var(--text-secondary)]">Küçült / Geniş Bak:</span>
+          <kbd class="px-1.5 py-0.5 rounded bg-slate-500/15 text-[var(--text-secondary)] font-bold">Ctrl + Tekerlek</kbd>
+        </div>
+      </div>
+    </aside>
+
+    <!-- SAĞ / MERKEZ ÇALIŞMA VE OKUMA TUVALİ -->
+    <main id="readerScrollContainer" class="flex-1 relative">
+      <div id="studyPageZoomSizer">
+        <div id="studyPageSheet" class="study-page-sheet">
+          <!-- Üst Ders Bilgi Kartı -->
+        <div id="noteHeroBanner" class="mb-6 pb-4 border-b border-[var(--border-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="inline-flex items-center space-x-2 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/10 text-blue-600 dark:text-sky-400 border border-blue-500/20 mb-1.5">
+              <span>📘 İnteraktif Çalışma Kitabı</span>
+            </div>
+            <h1 id="noteHeroTitle" class="text-2xl font-black tracking-tight text-[var(--text-main)]">Ders Notu Yükleniyor...</h1>
+            <p id="noteHeroSubtitle" class="text-xs text-[var(--text-muted)] mt-1"></p>
+          </div>
+          <div class="flex items-center space-x-2 shrink-0">
+            <button onclick="setQuickOverviewZoom()" class="px-3 py-1.5 rounded-xl text-xs font-bold border border-[var(--border-strong)] bg-[var(--bg-card)] hover:border-blue-500 text-[var(--text-main)] transition" title="Sayfayı %70 ölçek + Tam Genişlik moduna alarak geniş kuşbakışı göster">
+              🔍 %70 Geniş Bakış
+            </button>
+            <button onclick="triggerDemoSnipOnFirstFormula()" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-sm hover:opacity-95 transition flex items-center space-x-1" title="Örnek bir formül adımını otomatik seçip baloncuğu dene">
+              <span>✨</span>
+              <span>Örnek '=' Kırpması</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Markdown İçeriği -->
+        <article id="markdownContentArea" class="markdown-body"></article>
+
+        <!-- PDF İçeriği -->
+        <div id="pdfContentArea" class="hidden space-y-6"></div>
+        </div>
+      </div>
+
+      <!-- SHIFT + SÜRÜKLEME SEÇİM KUTUSU (144 FPS GPU translate3d) -->
+      <div id="snipSelectionBox">
+        <div id="snipLiveBadge">✂️ Formül / Adım Seçiliyor...</div>
+        <div class="snip-handle tl"></div>
+        <div class="snip-handle tr"></div>
+        <div class="snip-handle bl"></div>
+        <div class="snip-handle br"></div>
+      </div>
+
+      <!-- KIRPILAN ALANIN YANINDA AÇILAN KOMPAKT, TAŞINABİLİR & YENİDEN BOYUTLANDIRILABİLİR AI BALONCUĞU -->
+      <div id="snipBubble" onmousedown="event.stopPropagation()">
+        <!-- Sürüklenebilir Kompakt Üst Başlık -->
+        <div id="snipBubbleDragHeader" class="px-2.5 py-1.5 bg-slate-900 text-white flex items-center justify-between border-b border-white/10 cursor-move select-none shrink-0">
+          <div class="flex items-center space-x-1.5 min-w-0">
+            <!-- Minik L - M - H Seçici Baloncuğu -->
+            <div id="flashLevelPillGroup" class="inline-flex items-center bg-slate-800/90 border border-white/15 rounded-full p-0.5 shrink-0" onmousedown="event.stopPropagation()" title="Düşünme Seviyesi (Low / Medium / High)">
+              <button type="button" data-level="low" onclick="setFlashLevel('low')" class="lmh-pill-btn">L</button>
+              <button type="button" data-level="medium" onclick="setFlashLevel('medium')" class="lmh-pill-btn active">M</button>
+              <button type="button" data-level="high" onclick="setFlashLevel('high')" class="lmh-pill-btn">H</button>
+            </div>
+            <span id="bubbleContextSectionLabel" class="text-[11px] font-semibold text-slate-200 truncate">Bağlam hazır</span>
+            <span id="bubbleElapsedTime" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 hidden shrink-0"></span>
+          </div>
+
+          <div class="flex items-center space-x-1 shrink-0" onmousedown="event.stopPropagation()">
+            <button id="pinExplanationBtn" onclick="togglePinCurrentBubble()" class="hidden px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-300 border border-emerald-400/40 transition flex items-center space-x-1" title="Önemli olarak işaretle / İğneyi kaldır">
+              <span>📌</span>
+              <span id="pinBtnText">İğnele</span>
+            </button>
+            <button id="deleteBubbleBtn" onclick="deleteCurrentBubbleCompletely()" class="hidden w-5 h-5 rounded-md hover:bg-red-500/25 text-slate-400 hover:text-red-300 flex items-center justify-center text-[11px] transition" title="Bu soru-cevabı tamamen sil">
+              🗑️
+            </button>
+            <button onclick="closeSnipBubble()" class="w-5 h-5 rounded-md hover:bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[11px] font-bold transition" title="Küçült (Minik yuvarlak olarak kalsın)">
+              ─
+            </button>
+          </div>
+        </div>
+
+        <!-- Kompakt Kırpılan Görsel Önizlemesi & Yakalanan Bağlam Özeti -->
+        <div class="px-2.5 py-1.5 bg-slate-500/5 border-b border-[var(--border-color)] flex items-center space-x-2 shrink-0">
+          <div id="bubbleCropPreviewWrapper" class="w-14 h-9 rounded border border-[var(--border-strong)] bg-white overflow-hidden shrink-0 flex items-center justify-center p-0.5">
+            <img id="bubbleCropPreviewImg" src="" alt="Kırpılan Alan" class="max-w-full max-h-full object-contain">
+          </div>
+          <div class="flex-1 min-w-0 text-[11px] space-y-0.5">
+            <div class="flex items-center justify-between">
+              <span id="bubbleFocusTag" class="font-bold text-blue-600 dark:text-sky-400 truncate">🎯 Seçilen Alan</span>
+              <button onclick="toggleContextInspector()" class="text-[10px] text-[var(--text-muted)] hover:text-blue-500 underline shrink-0">
+                Bağlamı Gör
+              </button>
+            </div>
+            <div id="bubbleCapturedLatexPreview" class="text-[10px] font-mono text-[var(--text-secondary)] bg-[var(--bg-card)] px-1.5 py-0.5 rounded border border-[var(--border-color)] truncate">
+              Formül / metin yakalandı
+            </div>
+          </div>
+        </div>
+
+        <!-- Gizli Bağlam Denetleyicisi -->
+        <div id="bubbleContextInspector" class="hidden px-2.5 py-1.5 bg-slate-900 text-slate-200 text-[10px] border-b border-slate-700 max-h-28 overflow-y-auto space-y-1 font-mono shrink-0">
+          <div class="text-sky-400 font-bold">📦 Otomatik Bağlam + Görsel:</div>
+          <div id="bubbleContextInspectorText" class="whitespace-pre-wrap text-[10px] text-slate-300 leading-relaxed"></div>
+        </div>
+
+        <!-- Hızlı Tek-Tık Soru Şablonları (Pre-queue / Presets) -->
+        <div id="bubbleQuickPrompts" class="px-2.5 pt-1.5 pb-1 flex flex-wrap gap-1 shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-card)]/40"></div>
+
+        <!-- Sohbet / Açıklama Akışı Alanı -->
+        <div id="bubbleConversationArea" class="px-2.5 py-2 flex-1 min-h-[90px] overflow-y-auto space-y-2 hidden"></div>
+
+        <!-- Yanıt Sonrası Tek-Tık Devam (Follow-up) Çipleri -->
+        <div id="bubbleFollowUpPrompts" class="hidden px-2.5 py-1.5 flex-wrap gap-1 shrink-0 border-t border-[var(--border-color)] bg-slate-500/5"></div>
+
+        <!-- Soru Yazma Kutusu -->
+        <div class="p-2 border-t border-[var(--border-color)] bg-[var(--bg-card)] shrink-0">
+          <div class="flex items-center space-x-1.5">
+            <textarea id="bubbleQuestionInput" rows="1" placeholder="Anlamadığın yeri sor"
+              onkeydown="handleBubbleInputKeydown(event)"
+              class="flex-1 rounded-lg px-2.5 py-1.5 text-xs bg-[var(--bg-page)] border border-[var(--border-strong)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 resize-none leading-snug"></textarea>
+            <button id="bubbleAskSubmitBtn" onclick="submitBubbleQuestion()" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-sky-500 hover:from-blue-500 hover:to-sky-400 text-white text-xs font-extrabold shadow-sm transition shrink-0 flex items-center space-x-1">
+              <span>Sor</span>
+              <span>↵</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Kenar & Köşe Yeniden Boyutlandırma Tutamaçları -->
+        <div class="bubble-resizer resizer-r" data-resize="r"></div>
+        <div class="bubble-resizer resizer-b" data-resize="b"></div>
+        <div class="bubble-resizer resizer-l" data-resize="l"></div>
+        <div class="bubble-resizer resizer-br" data-resize="br" title="Boyutlandır"></div>
+        <div class="bubble-resizer resizer-bl" data-resize="bl" title="Boyutlandır"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- MAT3327 İNTERAKTİF LABORATUVAR MODALI -->
+  <div id="interactiveLabModal" class="fixed inset-0 z-[100] bg-black/75 hidden flex-col p-4 lg:p-6">
+    <div class="bg-slate-900 border border-white/15 rounded-2xl flex-1 flex flex-col overflow-hidden shadow-2xl">
+      <div class="px-5 py-3 border-b border-white/10 flex items-center justify-between bg-slate-950">
+        <div class="flex items-center space-x-2.5">
+          <span class="text-emerald-400 font-bold">⚡</span>
+          <h3 class="text-sm font-extrabold text-white">MAT3327 Ayrık Matematik — İnteraktif Simülatör & Portal</h3>
+        </div>
+        <button onclick="toggleInteractiveLabModal()" class="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold">
+          ✕ Kapat ve Nota Dön
+        </button>
+      </div>
+      <iframe id="interactiveLabIframe" src="" class="flex-1 w-full border-0"></iframe>
+    </div>
+  </div>
+
+  <!-- NASIL KULLANILIR (? REHBER) MODALI -->
+  <div id="helpModal" class="fixed inset-0 z-[110] bg-black/60 hidden items-center justify-center p-4">
+    <div class="bg-[var(--bg-page)] border border-[var(--border-strong)] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+        <h3 class="text-base font-extrabold text-[var(--text-main)] flex items-center space-x-2">
+          <span>✂️</span>
+          <span>StudyLens — Kısayollar ve Kullanım</span>
+        </h3>
+        <button onclick="closeHelpModal()" class="text-[var(--text-muted)] hover:text-[var(--text-main)] font-bold">✕</button>
+      </div>
+      <div class="space-y-3 text-xs text-[var(--text-secondary)] leading-relaxed">
+        <div class="p-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)]">
+          <div class="font-bold text-[var(--text-main)] mb-1">1. Sayfayı Küçültme & Geniş Bakış</div>
+          <kbd class="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 font-bold">Ctrl + Fare Tekerleği</kbd> veya üst bardaki <strong>− / 100% / +</strong> ve <strong>↔ Geniş Bakış</strong> butonlarıyla sayfayı istediğin kadar küçültüp geniş açıdan inceleyebilirsin.
+        </div>
+        <div class="p-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)]">
+          <div class="font-bold text-[var(--text-main)] mb-1">2. Shift + Fareyle Kırp (144 FPS Anlık Seçim)</div>
+          Klavyede <kbd class="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 font-bold">Shift</kbd> tuşuna basılı tutarken anlamadığın yeri (ör. <code class="font-mono font-bold">=</code> sonrası adımı) kutu içine al. Fareyi bıraktığın anda baloncuk sıfır gecikmeyle açılır.
+        </div>
+        <div class="p-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)]">
+          <div class="font-bold text-[var(--text-main)] mb-1">3. L / M / H Seviye Seçimi & Taşınabilir Baloncuk</div>
+          Üstteki minik <strong>L - M - H</strong> baloncuğundan yanıt derinliğini seçebilir, baloncuğu başlığından tutup sürükleyebilir ve kenarlarından yeniden boyutlandırabilirsin.
+        </div>
+      </div>
+      <div class="flex justify-end pt-2">
+        <button onclick="closeHelpModal()" class="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition">
+          Tamam
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

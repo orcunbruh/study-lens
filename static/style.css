@@ -1,0 +1,619 @@
+/* StudyLens — 144 FPS Donanım İvmeli Ders & Not Çalışma Merkezi */
+
+:root,
+body.theme-light {
+  --bg-app: #d4d8dd; /* Google PDF okuyucu tarzı kontrast çalışma arka planı */
+  --bg-sidebar: #ffffff;
+  --bg-header: #ffffff;
+  --bg-page: #ffffff;
+  --bg-card: #f8fafc;
+  --bg-subtle: #eff6ff;
+  --text-main: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --accent-primary: #2563eb;
+  --accent-secondary: #0284c7;
+  --accent-emerald: #059669;
+  --accent-amber: #d97706;
+  --h1-bg: linear-gradient(90deg, #eff6ff 0%, #ffffff 100%);
+  --h1-border: #2563eb;
+  --code-bg: #f1f5f9;
+  --table-head: #1e3a8a;
+  --table-head-text: #ffffff;
+  --table-stripe: #f8fafc;
+  --bubble-bg: #ffffff;
+}
+
+body.theme-dark {
+  --bg-app: #060911;
+  --bg-sidebar: #0b1120;
+  --bg-header: #0b1120;
+  --bg-page: #0f172a;
+  --bg-card: #1e293b;
+  --bg-subtle: rgba(56, 189, 248, 0.08);
+  --text-main: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border-color: #1e293b;
+  --border-strong: #334155;
+  --accent-primary: #38bdf8;
+  --accent-secondary: #6366f1;
+  --accent-emerald: #10b981;
+  --accent-amber: #f59e0b;
+  --h1-bg: linear-gradient(90deg, rgba(37, 99, 235, 0.22) 0%, rgba(15, 23, 42, 0) 100%);
+  --h1-border: #38bdf8;
+  --code-bg: #1e293b;
+  --table-head: #1e293b;
+  --table-head-text: #38bdf8;
+  --table-stripe: rgba(30, 41, 59, 0.45);
+  --bubble-bg: #111827;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg-app);
+  color: var(--text-main);
+  font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  overflow: hidden;
+}
+
+/* 144Hz GPU İlerleme Çubuğu */
+#readingProgressBar {
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  will-change: transform;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.42);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.65);
+}
+
+/* Top Snipping Mode Banner — GPU composited */
+#snipHudBanner {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translate3d(-50%, -18px, 0);
+  z-index: 90;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform, opacity;
+  transition: transform 0.12s ease-out, opacity 0.12s ease-out;
+}
+#snipHudBanner.active {
+  opacity: 1;
+  transform: translate3d(-50%, 0, 0);
+}
+
+/* Reader Viewport — Google PDF tarzı gri/koyu masa üstünde ortalanmış kağıt */
+#readerScrollContainer {
+  position: relative;
+  overflow: auto;
+  will-change: scroll-position;
+  padding: 24px 16px 96px 16px;
+}
+
+body.snipping-cursor #readerScrollContainer,
+body.snipping-cursor #readerScrollContainer * {
+  cursor: crosshair !important;
+  user-select: none !important;
+}
+
+/* Google PDF Viewer Mantığı: Ölçeklenen Kağıt Yuvası (Sizer) */
+#studyPageZoomSizer {
+  position: relative;
+  margin: 0 auto;
+  transform-origin: 0 0;
+  contain: layout style;
+}
+
+/* Sabit fiziksel genişlikli kağıt: küçültüp büyütürken satır kayması yapmaz, tıpkı PDF gibi ölçeklenir */
+.study-page-sheet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 980px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.10);
+  padding: 44px 54px;
+  transform-origin: 0 0;
+  backface-visibility: hidden;
+  contain: layout style paint;
+}
+
+body.is-zooming .study-page-sheet {
+  box-shadow: none !important;
+  pointer-events: none;
+}
+
+.study-page-sheet.wide-mode {
+  width: 1440px;
+  padding: 40px 56px;
+}
+
+/* 144 FPS Görünüm Alanı Sanallaştırma (Ekran dışı bölümler GPU'yu yormaz) */
+.study-section-chunk.cv-auto {
+  content-visibility: auto;
+  contain: layout style paint;
+}
+
+/* Markdown Textbook Typography — 144 FPS Alt-Ağaç İzolasyonu */
+.markdown-body {
+  font-size: 15.5px;
+  line-height: 1.80;
+  color: var(--text-main);
+  contain: layout style;
+}
+
+.markdown-body > * {
+  contain: layout style;
+}
+
+.markdown-body h1 {
+  font-size: 1.62rem;
+  font-weight: 800;
+  color: var(--text-main);
+  background: var(--h1-bg);
+  border-left: 6px solid var(--h1-border);
+  border-bottom: 1px solid var(--border-color);
+  padding: 13px 18px;
+  margin: 38px 0 20px 0;
+  border-radius: 0 10px 10px 0;
+  letter-spacing: -0.015em;
+}
+
+.markdown-body h1:first-child {
+  margin-top: 0;
+}
+
+.markdown-body h2 {
+  font-size: 1.30rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  border-bottom: 1.5px solid var(--border-color);
+  padding-bottom: 7px;
+  margin: 30px 0 14px 0;
+}
+
+.markdown-body h3 {
+  font-size: 1.10rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 24px 0 10px 0;
+}
+
+.markdown-body h4 {
+  font-size: 1.00rem;
+  font-weight: 600;
+  color: var(--accent-secondary);
+  background: var(--bg-card);
+  border-left: 4px solid var(--accent-primary);
+  padding: 7px 13px;
+  margin: 16px 0 10px 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.markdown-body p {
+  margin: 9px 0 13px 0;
+  color: var(--text-secondary);
+}
+
+.markdown-body strong {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 9px 0 15px 0;
+  padding-left: 24px;
+  color: var(--text-secondary);
+}
+
+.markdown-body li {
+  margin-bottom: 6px;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1.5px dashed var(--border-strong);
+  margin: 28px 0;
+}
+
+/* Callouts & Blockquotes */
+.markdown-body blockquote {
+  background: var(--bg-subtle);
+  border-left: 5px solid var(--accent-primary);
+  margin: 18px 0;
+  padding: 14px 18px;
+  border-radius: 0 10px 10px 0;
+  color: var(--text-secondary);
+}
+
+.callout-box {
+  margin: 18px 0;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border-left: 5px solid var(--accent-primary);
+  background: var(--bg-subtle);
+}
+.callout-NOTE {
+  border-left-color: #0284c7;
+  background: rgba(2, 132, 199, 0.08);
+}
+.callout-IMPORTANT {
+  border-left-color: #7c3aed;
+  background: rgba(124, 58, 237, 0.08);
+}
+.callout-WARNING, .callout-CAUTION {
+  border-left-color: #d97706;
+  background: rgba(217, 119, 6, 0.10);
+}
+.callout-TIP {
+  border-left-color: #059669;
+  background: rgba(5, 150, 105, 0.09);
+}
+
+/* Tables */
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 18px 0;
+  font-size: 0.93rem;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.markdown-body th {
+  background: var(--table-head);
+  color: var(--table-head-text);
+  font-weight: 700;
+  text-align: left;
+  padding: 10px 13px;
+  border: 1px solid var(--border-color);
+}
+
+.markdown-body td {
+  padding: 9px 13px;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.markdown-body tr:nth-child(even) td {
+  background: var(--table-stripe);
+}
+
+/* Code & Pre */
+.markdown-body code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.88em;
+}
+
+.markdown-body pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 14px 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+/* Desmos & Study Figures */
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 20px auto;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: #ffffff;
+  padding: 6px;
+}
+
+/* KaTeX Display Blocks */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 9px 12px;
+  margin: 12px 0 !important;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  contain: layout style paint;
+}
+
+/* 144 FPS GPU-Composited Snipping Selection Box */
+#snipSelectionBox {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 65;
+  border: 2px solid #0ea5e9;
+  background: rgba(14, 165, 233, 0.11);
+  border-radius: 7px;
+  pointer-events: none;
+  display: none;
+  will-change: transform, width, height;
+  transform: translate3d(0, 0, 0);
+}
+
+#snipSelectionBox.locked {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.10);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+
+.snip-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #ffffff;
+  border: 2px solid #0ea5e9;
+  border-radius: 50%;
+}
+#snipSelectionBox.locked .snip-handle {
+  border-color: #10b981;
+}
+.snip-handle.tl { top: -4px; left: -4px; }
+.snip-handle.tr { top: -4px; right: -4px; }
+.snip-handle.bl { bottom: -4px; left: -4px; }
+.snip-handle.br { bottom: -4px; right: -4px; }
+
+#snipLiveBadge {
+  position: absolute;
+  top: -28px;
+  left: 0;
+  white-space: nowrap;
+  background: #0f172a;
+  color: #38bdf8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+/* Floating Question & Explanation Bubble — Compact, Draggable & Resizable */
+#snipBubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 80;
+  width: 370px;
+  min-width: 280px;
+  max-width: calc(100vw - 24px);
+  max-height: 82vh;
+  background: var(--bubble-bg);
+  border: 1.5px solid var(--accent-primary);
+  border-radius: 12px;
+  box-shadow: 0 16px 38px -8px rgba(15, 23, 42, 0.32);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  will-change: transform, width, height;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Minik L - M - H Baloncuğu (Segmented Pill) */
+.lmh-pill-btn {
+  width: 20px;
+  height: 18px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  color: #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.lmh-pill-btn:hover {
+  color: #f8fafc;
+}
+.lmh-pill-btn.active {
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.45);
+}
+
+/* Yeniden Boyutlandırma Tutamaçları (Resize Handles) */
+.bubble-resizer {
+  position: absolute;
+  z-index: 90;
+}
+.bubble-resizer.resizer-r {
+  top: 28px;
+  right: 0;
+  width: 6px;
+  bottom: 14px;
+  cursor: ew-resize;
+}
+.bubble-resizer.resizer-l {
+  top: 28px;
+  left: 0;
+  width: 6px;
+  bottom: 14px;
+  cursor: ew-resize;
+}
+.bubble-resizer.resizer-b {
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 6px;
+  cursor: ns-resize;
+}
+.bubble-resizer.resizer-br {
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+.bubble-resizer.resizer-br::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  opacity: 0.55;
+}
+.bubble-resizer.resizer-bl {
+  left: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nesw-resize;
+}
+
+/* Sayfa Üzerindeki Sade Minik Yuvarlak Nokta (Minimized Bubble Dot) */
+.study-pin-marker {
+  position: absolute;
+  z-index: 55;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 32% 32%, #38bdf8 0%, #2563eb 100%);
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.45), 0 0 0 2.5px rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+.study-pin-marker::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.88);
+}
+.study-pin-marker.is-pinned {
+  background: radial-gradient(circle at 32% 32%, #34d399 0%, #059669 100%);
+  box-shadow: 0 3px 11px rgba(5, 150, 105, 0.52), 0 0 0 2.5px rgba(255, 255, 255, 0.95);
+}
+.study-pin-marker:hover {
+  transform: scale(1.22);
+}
+
+/* PDF Page Canvas Wrapper */
+.pdf-page-container {
+  position: relative;
+  margin: 0 auto 24px auto;
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+.pdf-page-container canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Pre-queue / Preset ve Follow-up Çipleri + Spoiler Kutusu */
+.prequeue-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.1s ease, background-color 0.12s ease, border-color 0.12s ease;
+}
+.prequeue-chip:hover {
+  transform: translateY(-1px);
+}
+.prequeue-chip:active {
+  transform: translateY(0);
+}
+
+.markdown-body details {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  border: 1px dashed var(--accent-primary);
+}
+.markdown-body details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--accent-primary);
+  user-select: none;
+  outline: none;
+}
+.markdown-body details[open] summary {
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* ============================================================================
+   🙈 ÇÖZÜMLERİ GİZLE / BULANIKLAŞTIR (ACTIVE RECALL) MODU
+   ============================================================================ */
+body.blur-solutions-active .solution-blur-target:not(.revealed) {
+  position: relative;
+  filter: blur(7.5px);
+  opacity: 0.62;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 8px;
+  transition: filter 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
+}
+
+body.blur-solutions-active .solution-blur-target:not(.revealed):hover {
+  filter: blur(5px);
+  opacity: 0.82;
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.45);
+}
+
+body.blur-solutions-active .solution-blur-target.revealed {
+  filter: none;
+  opacity: 1;
+  cursor: pointer;
+  border-radius: 8px;
+  box-shadow: inset 3px 0 0 rgba(16, 185, 129, 0.75);
+  transition: filter 0.16s ease, opacity 0.16s ease;
+}
+
+/* Tablo hücrelerinde (iterasyon sonuçlarında) daha zarif bulanıklık */
+body.blur-solutions-active td.solution-blur-target:not(.revealed) {
+  filter: blur(6px);
+  opacity: 0.55;
+}
