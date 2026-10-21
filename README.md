@@ -17,7 +17,6 @@ cd study-lens
 ### 2. Çalıştırın
 Terminalden:
 ```bash
-chmod +x run.sh
 ./run.sh
 ```
 Veya Finder içinde **`run.command`** dosyasına çift tıklayarak doğrudan açabilirsiniz.
